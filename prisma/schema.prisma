@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String   @id @default(cuid())
+  name          String?
+  email         String   @unique
+  passwordHash  String
+  role          String   @default("admin")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+model CompanySettings {
+  id               String   @id @default(cuid())
+  companyName      String   @default("Legends Homecare LLC")
+  qboCompanyName   String   @default("Legends Homecare LLC")
+  bankName         String   @default("Bank of America")
+  currency         String   @default("USD")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ChartOfAccount {
+  id            String   @id @default(cuid())
+  accountName   String
+  accountType   String
+  detailType    String?
+  parentAccount String?
+  isActive      Boolean  @default(true)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transactions       ExtractedTransaction[] @relation("SuggestedAccount")
+  reviewTransactions ExtractedTransaction[] @relation("ReviewedAccount")
+  rules              CategorizationRule[]
+
+  @@unique([accountName])
+}
+
+model StatementUpload {
+  id              String   @id @default(cuid())
+  fileName        String
+  filePath        String
+  statementMonth  Int
+  statementYear   Int
+  openingBalance  Float?
+  closingBalance  Float?
+  bankName        String   @default("Bank of America")
+  uploadStatus    String   @default("uploaded") // uploaded, processing, extracted, error
+  extractionData  String?  // JSON blob of raw extraction result
+  totalDeposits   Float?
+  totalWithdrawals Float?
+  totalChecks     Float?
+  totalFees       Float?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactions ExtractedTransaction[]
+  exports      ExportFile[]
+}
+
+model ExtractedTransaction {
+  id                String   @id @default(cuid())
+  statementId       String
+  date              DateTime
+  description       String
+  checkNumber       String?
+  moneyIn           Float?
+  moneyOut          Float?
+  amount            Float
+  direction         String   // "Money In" or "Money Out"
+  section           String?  // deposits, withdrawals, checks, fees, transfers
+  sourcePage        Int?
+  rawText           String?
+  suggestedAccountId String?
+  suggestedAccountName String?
+  confidence        Float?   @default(0)
+  reviewStatus      String   @default("pending") // pending, reviewed, needs_review, needs_client
+  ruleName          String?
+  vendorPayee       String?
+  isManual          Boolean  @default(false)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  statement        StatementUpload @relation(fields: [statementId], references: [id], onDelete: Cascade)
+  suggestedAccount ChartOfAccount? @relation("SuggestedAccount", fields: [suggestedAccountId], references: [id])
+  reviewedAccount  ChartOfAccount? @relation("ReviewedAccount", fields: [reviewedAccountId], references: [id])
+  reviewedAccountId String?
+  qboSyncStatus     String?  // pending, synced, failed
+  qboTxnId          String?  // QBO transaction ID after push
+  qboSyncedAt       DateTime?
+
+  @@index([statementId])
+  @@index([reviewStatus])
+  @@index([direction])
+  @@index([qboSyncStatus])
+}
+
+model CategorizationRule {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  direction      String   // "Money In" or "Money Out"
+  matchField     String   @default("description") // description, checkNumber, vendorPayee, amount, section
+  condition      String   @default("contains") // contains, startsWith, endsWith, equals, greaterThan, lessThan
+  matchValue     String
+  accountId      String
+  vendorPayee    String?
+  autoApply      Boolean  @default(true)
+  confidence     Float    @default(0.8)
+  priority       Int      @default(100)
+  isActive       Boolean  @default(true)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  account ChartOfAccount @relation(fields: [accountId], references: [id])
+
+  @@index([isActive, priority])
+}
+
+model ExportFile {
+  id            String   @id @default(cuid())
+  statementId   String?
+  exportType    String   // qbo_bank_upload, categorization_review, audit
+  fileName      String
+  filePath      String
+  recordCount   Int      @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  statement StatementUpload? @relation(fields: [statementId], references: [id])
+}
+
+model QboConnection {
+  id           String   @id @default(cuid())
+  realmId      String   @unique
+  companyName  String?
+  accessToken  String
+  refreshToken String
+  tokenType    String   @default("bearer")
+  expiresAt    DateTime
+  scope        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  entityType  String
+  entityId    String?
+  details     String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
