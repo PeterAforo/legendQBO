@@ -59,7 +59,21 @@ async function getDashboardStats() {
 }
 
 export default async function DashboardPage() {
-  const stats = await getDashboardStats();
+  let stats;
+  try {
+    stats = await getDashboardStats();
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    stats = {
+      totalStatements: 0,
+      totalTransactions: 0,
+      categorizedCount: 0,
+      uncategorizedCount: 0,
+      needsReviewCount: 0,
+      latestExports: [] as Awaited<ReturnType<typeof getDashboardStats>>["latestExports"],
+      latestStatements: [] as Awaited<ReturnType<typeof getDashboardStats>>["latestStatements"],
+    };
+  }
 
   const cards = [
     {
