@@ -65,7 +65,14 @@ export async function GET() {
       })),
     });
   } catch (error: unknown) {
+    console.error("Dashboard stats error:", error);
     const message = error instanceof Error ? error.message : "Failed to fetch stats";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({
+      error: message,
+      categoryBreakdown: [],
+      monthlyTotals: [],
+      reviewStatus: [],
+      directionBreakdown: [],
+    }, { status: 500 });
   }
 }

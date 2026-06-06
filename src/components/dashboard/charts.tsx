@@ -48,16 +48,23 @@ export function DashboardCharts() {
 
   useEffect(() => {
     fetch("/api/dashboard/stats")
-      .then((r) => r.json())
-      .then(setData)
+      .then((r) => {
+        if (!r.ok) throw new Error("Stats API error");
+        return r.json();
+      })
+      .then((d) => {
+        if (d.categoryBreakdown && d.monthlyTotals && d.reviewStatus) {
+          setData(d);
+        }
+      })
       .catch(() => {});
   }, []);
 
   if (!data) return null;
 
-  const hasMonthly = data.monthlyTotals.length > 0;
-  const hasCategories = data.categoryBreakdown.length > 0;
-  const hasReview = data.reviewStatus.length > 0;
+  const hasMonthly = data.monthlyTotals?.length > 0;
+  const hasCategories = data.categoryBreakdown?.length > 0;
+  const hasReview = data.reviewStatus?.length > 0;
 
   if (!hasMonthly && !hasCategories && !hasReview) return null;
 
