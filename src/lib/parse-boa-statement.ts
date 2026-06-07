@@ -6,6 +6,8 @@
  * e.g. "01/02/26BKOFAMERICA ATM 01/02 ...10,976.00"
  */
 
+export type QboTxType = "Deposit" | "Check" | "Expense";
+
 export interface ParsedTransaction {
   date: string;
   description: string;
@@ -16,6 +18,9 @@ export interface ParsedTransaction {
   direction: string;
   section: string;
   raw_text: string;
+  payee: string;
+  memo: string;
+  txType: QboTxType;
 }
 
 export interface ParsedSummary {
@@ -174,22 +179,26 @@ export function parseBofAStatement(text: string): ExtractionResult {
       continue;
     }
 
-    // Parse checks section (two-column, no spaces)
+    // Parse checks section (two-column, with spaces)
     if (currentSection === "checks") {
       const checkMatches = [...line.matchAll(CHECK_ENTRY_RE)];
       for (const cm of checkMatches) {
         const date = parseDate(cm[1], year);
         const checkNum = cm[2] ? cm[2].replace("*", "") : undefined;
         const amt = parseAmount(cm[3]);
+        const desc = checkNum ? `Check #${checkNum}` : "Check (no number)";
         transactions.push({
           date,
-          description: checkNum ? `Check #${checkNum}` : "Check (no number)",
+          description: desc,
           check_number: checkNum,
           money_out: Math.abs(amt),
           amount: Math.abs(amt),
           direction: "Money Out",
           section: "Checks",
           raw_text: line,
+          payee: "",
+          memo: desc,
+          txType: "Check",
         });
       }
       continue;
@@ -236,6 +245,9 @@ function flushPending(
     section === "withdrawals" ? "Withdrawals" :
     section === "fees" ? "Service Fees" : "Unknown";
 
+  const { payee, memo } = extractPayeeAndMemo(description);
+  const txType: QboTxType = isDeposit ? "Deposit" : "Expense";
+
   transactions.push({
     date,
     description,
@@ -245,5 +257,98 @@ function flushPending(
     direction: isDeposit ? "Money In" : "Money Out",
     section: sectionLabel,
     raw_text: line,
+    payee,
+    memo,
+    txType,
   });
+}
+
+/**
+ * Extracts the payee name and memo from a BofA transaction description.
+ * Handles common patterns: Zelle, CHECKCARD, ACH/DES, Counter Credit, ATM deposits, etc.
+ */
+function extractPayeeAndMemo(description: string): { payee: string; memo: string } {
+  // Zelle payment to/from: "Zelle payment to  Name for \"memo\"; Conf# xxx"
+  const zelleMatch = description.match(/^Zelle payment (?:to|from)\s+(.+?)\s+for\s+"(.+?)"/);
+  if (zelleMatch) {
+    return { payee: zelleMatch[1].trim(), memo: zelleMatch[2].trim() };
+  }
+  // Zelle without for clause: "Zelle payment to  Name; Conf# xxx"
+  const zelleSimple = description.match(/^Zelle payment (?:to|from)\s+(.+?)(?:;|$)/);
+  if (zelleSimple) {
+    return { payee: zelleSimple[1].trim(), memo: description };
+  }
+
+  // CHECKCARD: "CHECKCARD  0102 STAPLES ... SOUTHINGTON  CT ..."
+  const cardMatch = description.match(/^CHECKCARD\s+\d{4}\s+(.+?)\s{2,}/);
+  if (cardMatch) {
+    return { payee: titleCase(cardMatch[1].trim()), memo: description };
+  }
+
+  // ACH/EFT with DES and INDN: "EVERSOURCE  DES:WEB_PAY ... INDN:TRACY NTIM  CO ..."
+  const achIndnMatch = description.match(/^(.+?)\s+DES:.+?INDN:(.+?)\s{2,}/);
+  if (achIndnMatch) {
+    return { payee: titleCase(achIndnMatch[2].trim()), memo: description };
+  }
+  // ACH without INDN: "COMPANY  DES:TYPE  ID:xxx"
+  const achMatch = description.match(/^(.+?)\s+DES:/);
+  if (achMatch) {
+    return { payee: titleCase(achMatch[1].trim()), memo: description };
+  }
+
+  // Online Banking transfer: "Online Banking transfer from SAV 5806 Confirmation# xxx"
+  const onlineMatch = description.match(/^Online Banking transfer from (\w+\s+\d+)/);
+  if (onlineMatch) {
+    return { payee: `Transfer from ${onlineMatch[1]}`, memo: description };
+  }
+
+  // ATM deposit: "BKOFAMERICA ATM 01/02 #000004962 DEPOSIT AMITY ... NEW HAVEN CT"
+  const atmMatch = description.match(/^BKOFAMERICA ATM .+ DEPOSIT\s+(.+?)\s{2,}/);
+  if (atmMatch) {
+    return { payee: `ATM Deposit - ${titleCase(atmMatch[1].trim())}`, memo: description };
+  }
+
+  // Mobile deposit: "BKOFAMERICA MOBILE 01/05 3831137595 DEPOSIT ..."
+  if (/^BKOFAMERICA MOBILE/.test(description)) {
+    return { payee: "Mobile Deposit", memo: description };
+  }
+
+  // BKOFAMERICA BC (branch credit): "BKOFAMERICA BC  01/20 #000006267 FR CHKG"
+  if (/^BKOFAMERICA BC/.test(description)) {
+    return { payee: "Bank Transfer (Branch)", memo: description };
+  }
+
+  // Counter Credit
+  if (/^Counter Credit/i.test(description)) {
+    return { payee: "Counter Credit (Cash/Check Deposit)", memo: description };
+  }
+
+  // PURCHASE with merchant: "SHELL SERVICE   01/05 #000713553 PURCHASE SHELL SERVICE STA  NEW HAVEN CT"
+  const purchaseMatch = description.match(/^(.+?)\s+\d{2}\/\d{2}\s+#\d+\s+PURCHASE\s+(.+?)\s{2,}/);
+  if (purchaseMatch) {
+    return { payee: titleCase(purchaseMatch[1].trim()), memo: description };
+  }
+
+  // PURCHASE without location pattern: "PURCHASE   0109 COMCAST / XFINITY 800-266-2278 NH"
+  const purchaseAlt = description.match(/^PURCHASE\s+\d{4}\s+(.+?)\s+\d{3}/);
+  if (purchaseAlt) {
+    return { payee: titleCase(purchaseAlt[1].trim()), memo: description };
+  }
+
+  // Service fee descriptions
+  if (/^(Excess Transaction Fee|Monthly Maintenance|Service Charge)/i.test(description)) {
+    return { payee: "Bank of America", memo: description };
+  }
+
+  // Fallback: use first meaningful word(s) as payee
+  const words = description.split(/\s+/).filter(w => w.length > 1);
+  const payee = titleCase(words.slice(0, 3).join(" "));
+  return { payee, memo: description };
+}
+
+function titleCase(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace(/\b(Ct|Ca|Nh|Co|Ma)\b/gi, (st) => st.toUpperCase());
 }

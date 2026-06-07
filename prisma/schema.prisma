@@ -99,6 +99,7 @@ model ExtractedTransaction {
   suggestedAccount ChartOfAccount? @relation("SuggestedAccount", fields: [suggestedAccountId], references: [id])
   reviewedAccount  ChartOfAccount? @relation("ReviewedAccount", fields: [reviewedAccountId], references: [id])
   reviewedAccountId String?
+  txType            String?  // Deposit, Check, Expense (QBO transaction type)
   qboSyncStatus     String?  // pending, synced, failed
   qboTxnId          String?  // QBO transaction ID after push
   qboSyncedAt       DateTime?

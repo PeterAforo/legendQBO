@@ -99,7 +99,9 @@ export async function POST(request: NextRequest) {
           confidence,
           reviewStatus: suggestedAccountId ? "pending" : "needs_review",
           ruleName,
-          vendorPayee,
+          vendorPayee: vendorPayee || tx.payee || null,
+          notes: tx.memo || null,
+          txType: tx.txType || null,
         },
       });
       createdCount++;
@@ -144,6 +146,9 @@ function getFieldValue(tx: ParsedTransaction, field: string): string {
     case "checkNumber": return tx.check_number || "";
     case "amount": return String(tx.amount || 0);
     case "section": return tx.section || "";
+    case "payee": return tx.payee || "";
+    case "memo": return tx.memo || "";
+    case "txType": return tx.txType || "";
     default: return tx.description || "";
   }
 }
