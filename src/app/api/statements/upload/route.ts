@@ -3,6 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import os from "os";
+
+function getUploadDir() {
+  // Vercel serverless: filesystem is read-only except /tmp
+  if (process.env.VERCEL) {
+    return path.join(os.tmpdir(), "uploads", "statements");
+  }
+  return path.join(process.cwd(), "uploads", "statements");
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,8 +33,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Save file to local storage
-    const uploadDir = path.join(process.cwd(), "uploads", "statements");
+    // Save file to temporary storage
+    const uploadDir = getUploadDir();
     await mkdir(uploadDir, { recursive: true });
 
     const timestamp = Date.now();

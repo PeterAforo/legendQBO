@@ -4,6 +4,14 @@ import { logAudit } from "@/lib/audit";
 import { stringify } from "csv-stringify/sync";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import os from "os";
+
+function getExportDir() {
+  if (process.env.VERCEL) {
+    return path.join(os.tmpdir(), "uploads", "exports");
+  }
+  return path.join(process.cwd(), "uploads", "exports");
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Save export file
-    const exportDir = path.join(process.cwd(), "uploads", "exports");
+    const exportDir = getExportDir();
     await mkdir(exportDir, { recursive: true });
     const filePath = path.join(exportDir, fileName);
     await writeFile(filePath, csvContent);
