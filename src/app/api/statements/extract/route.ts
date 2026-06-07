@@ -1,36 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import path from "path";
-
-const execFileAsync = promisify(execFile);
-
-interface ExtractedTx {
-  date: string;
-  description: string;
-  check_number?: string;
-  money_in?: number;
-  money_out?: number;
-  amount: number;
-  direction: string;
-  section?: string;
-  source_page?: number;
-  raw_text?: string;
-}
-
-interface ExtractionResult {
-  transactions: ExtractedTx[];
-  summary: {
-    total_deposits?: number;
-    total_withdrawals?: number;
-    total_checks?: number;
-    total_fees?: number;
-    opening_balance?: number;
-    closing_balance?: number;
-  };
-}
+import { readFile } from "fs/promises";
+import { parseBofAStatement, ExtractionResult, ParsedTransaction } from "@/lib/parse-boa-statement";
+import { extractTextFromPdf } from "@/lib/pdf-extract";
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,23 +25,20 @@ export async function POST(request: NextRequest) {
       data: { uploadStatus: "processing" },
     });
 
-    // Call Python extraction service
-    const pythonScript = path.join(process.cwd(), "python", "extract_boa.py");
+    // Read PDF and extract text with space-preserving renderer
     let result: ExtractionResult;
 
     try {
-      const { stdout } = await execFileAsync("python", [pythonScript, statement.filePath], {
-        maxBuffer: 50 * 1024 * 1024,
-        timeout: 120000,
-      });
-      result = JSON.parse(stdout);
-    } catch {
-      // If Python fails, update status and return error
+      const pdfBuffer = await readFile(statement.filePath);
+      const text = await extractTextFromPdf(pdfBuffer);
+      result = parseBofAStatement(text);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "PDF parsing failed";
       await prisma.statementUpload.update({
         where: { id: statementId },
-        data: { uploadStatus: "error", notes: "Python extraction failed" },
+        data: { uploadStatus: "error", notes: errMsg },
       });
-      return NextResponse.json({ error: "PDF extraction failed. Ensure Python and dependencies are installed." }, { status: 500 });
+      return NextResponse.json({ error: `PDF extraction failed: ${errMsg}` }, { status: 500 });
     }
 
     // Get categorization rules
@@ -122,7 +92,7 @@ export async function POST(request: NextRequest) {
           amount: Math.abs(amount),
           direction,
           section: tx.section || null,
-          sourcePage: tx.source_page || null,
+          sourcePage: null,
           rawText: tx.raw_text || null,
           suggestedAccountId,
           suggestedAccountName,
@@ -168,7 +138,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function getFieldValue(tx: ExtractedTx, field: string): string {
+function getFieldValue(tx: ParsedTransaction, field: string): string {
   switch (field) {
     case "description": return tx.description || "";
     case "checkNumber": return tx.check_number || "";
