@@ -44,11 +44,12 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(filePath, buffer);
 
-    // Save metadata to database
+    // Save metadata + file data to database
     const statement = await prisma.statementUpload.create({
       data: {
         fileName: file.name,
         filePath: filePath,
+        fileData: buffer,
         statementMonth: month,
         statementYear: year,
         openingBalance,

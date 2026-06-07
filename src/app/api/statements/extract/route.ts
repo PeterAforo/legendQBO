@@ -25,11 +25,16 @@ export async function POST(request: NextRequest) {
       data: { uploadStatus: "processing" },
     });
 
-    // Read PDF and extract text with space-preserving renderer
+    // Read PDF from DB (fileData) or fallback to filesystem
     let result: ExtractionResult;
 
     try {
-      const pdfBuffer = await readFile(statement.filePath);
+      let pdfBuffer: Buffer;
+      if (statement.fileData) {
+        pdfBuffer = Buffer.from(statement.fileData);
+      } else {
+        pdfBuffer = await readFile(statement.filePath);
+      }
       const text = await extractTextFromPdf(pdfBuffer);
       result = parseBofAStatement(text);
     } catch (err) {

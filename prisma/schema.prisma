@@ -52,6 +52,7 @@ model StatementUpload {
   id              String   @id @default(cuid())
   fileName        String
   filePath        String
+  fileData        Bytes?
   statementMonth  Int
   statementYear   Int
   openingBalance  Float?
