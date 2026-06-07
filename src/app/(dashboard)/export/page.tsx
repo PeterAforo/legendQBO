@@ -94,7 +94,7 @@ export default function ExportPage() {
     {
       type: "qbo_bank_upload",
       title: "QBO Bank Upload CSV",
-      description: "Date, Description, Money In, Money Out — ready for QuickBooks Online bank upload",
+      description: "Date, Bank description, Spent, Received, From/To, Match/Categorize — ready for QBO bank upload",
     },
     {
       type: "categorization_review",
