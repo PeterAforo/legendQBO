@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -40,6 +42,8 @@ interface ExportRecord {
 export default function ExportPage() {
   const [statements, setStatements] = useState<Statement[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [exports, setExports] = useState<ExportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
@@ -57,15 +61,28 @@ export default function ExportPage() {
   }, []);
 
   async function handleExport(type: string) {
-    if (!selectedId) return;
+    const hasStatement = !!selectedId;
+    const hasRange = !!fromDate && !!toDate;
+    if (!hasStatement && !hasRange) {
+      toast.error("Select a statement or provide a date range");
+      return;
+    }
     setExporting(type);
     try {
+      const payload: Record<string, string> = { exportType: type };
+      if (selectedId) payload.statementId = selectedId;
+      if (fromDate) payload.fromDate = fromDate;
+      if (toDate) payload.toDate = toDate;
+
       const res = await fetch("/api/exports/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ statementId: selectedId, exportType: type }),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error("Export failed");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Export failed");
+      }
 
       const blob = await res.blob();
       const disposition = res.headers.get("Content-Disposition");
@@ -83,8 +100,8 @@ export default function ExportPage() {
       // Refresh exports list
       const expsRes = await fetch("/api/exports");
       setExports(await expsRes.json());
-    } catch {
-      toast.error("Export failed");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Export failed");
     } finally {
       setExporting(null);
     }
@@ -112,22 +129,34 @@ export default function ExportPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Export</h1>
-        <p className="text-sm text-gray-500">Generate QuickBooks-ready CSV files</p>
+        <p className="text-sm text-gray-500">Generate QuickBooks-ready CSV files by statement or date range</p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <Select value={selectedId} onValueChange={setSelectedId}>
-          <SelectTrigger className="w-80">
-            <SelectValue placeholder="Select a statement..." />
-          </SelectTrigger>
-          <SelectContent>
-            {statements.map((s) => (
-              <SelectItem key={s.id} value={s.id}>
-                {s.fileName} ({s.statementMonth}/{s.statementYear})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">Statement</Label>
+          <Select value={selectedId} onValueChange={setSelectedId}>
+            <SelectTrigger className="w-72">
+              <SelectValue placeholder="Select a statement..." />
+            </SelectTrigger>
+            <SelectContent>
+              {statements.map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.fileName} ({s.statementMonth}/{s.statementYear})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="text-sm text-gray-400 pb-2">or</div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">From</Label>
+          <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="w-40" />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-gray-500">To</Label>
+          <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="w-40" />
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -143,7 +172,7 @@ export default function ExportPage() {
             <CardContent>
               <Button
                 onClick={() => handleExport(exp.type)}
-                disabled={!selectedId || exporting === exp.type}
+                disabled={(!selectedId && (!fromDate || !toDate)) || exporting === exp.type}
                 className="w-full"
               >
                 {exporting === exp.type ? (

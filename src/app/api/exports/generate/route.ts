@@ -15,23 +15,40 @@ function getExportDir() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { statementId, exportType } = await request.json();
+    const { statementId, exportType, fromDate, toDate } = await request.json();
 
-    if (!statementId || !exportType) {
+    if (!exportType) {
       return NextResponse.json(
-        { error: "statementId and exportType are required" },
+        { error: "exportType is required" },
         { status: 400 }
       );
     }
 
+    if (!statementId && (!fromDate || !toDate)) {
+      return NextResponse.json(
+        { error: "Provide either statementId or both fromDate and toDate" },
+        { status: 400 }
+      );
+    }
+
+    // Build where clause
+    const where: Record<string, unknown> = {};
+    if (statementId) where.statementId = statementId;
+    if (fromDate && toDate) {
+      where.date = {
+        gte: new Date(fromDate),
+        lte: new Date(toDate),
+      };
+    }
+
     const transactions = await prisma.extractedTransaction.findMany({
-      where: { statementId },
+      where,
       orderBy: { date: "asc" },
     });
 
     if (transactions.length === 0) {
       return NextResponse.json(
-        { error: "No transactions found for this statement" },
+        { error: "No transactions found for the selected criteria" },
         { status: 404 }
       );
     }
@@ -104,7 +121,7 @@ export async function POST(request: NextRequest) {
     // Store export record
     const exportRecord = await prisma.exportFile.create({
       data: {
-        statementId,
+        ...(statementId ? { statementId } : {}),
         exportType,
         fileName,
         filePath,

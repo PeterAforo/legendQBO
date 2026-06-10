@@ -28,7 +28,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Search, CheckCircle, AlertCircle, Loader2, Edit, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, CheckCircle, AlertCircle, Loader2, Edit, ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -70,6 +70,8 @@ export default function TransactionsPage() {
   const [editNotes, setEditNotes] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAccountId, setBulkAccountId] = useState("");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -176,6 +178,7 @@ export default function TransactionsPage() {
 
   async function handlePushToQbo() {
     if (selectedIds.size === 0) return;
+    setBulkActionLoading(true);
     try {
       const res = await fetch("/api/qbo/push", {
         method: "POST",
@@ -192,6 +195,52 @@ export default function TransactionsPage() {
       fetchTransactions();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Push to QBO failed");
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }
+
+  async function handleBulkStatus(status: string) {
+    if (selectedIds.size === 0) return;
+    setBulkActionLoading(true);
+    try {
+      const res = await fetch("/api/transactions/bulk-update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          reviewStatus: status,
+        }),
+      });
+      if (!res.ok) throw new Error("Update failed");
+      toast.success(`Marked ${selectedIds.size} transactions as ${status.replace("_", " ")}`);
+      setSelectedIds(new Set());
+      fetchTransactions();
+    } catch {
+      toast.error("Bulk status update failed");
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.size === 0) return;
+    setBulkActionLoading(true);
+    try {
+      const res = await fetch("/api/transactions/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds) }),
+      });
+      if (!res.ok) throw new Error("Delete failed");
+      toast.success(`Deleted ${selectedIds.size} transactions`);
+      setSelectedIds(new Set());
+      setShowDeleteConfirm(false);
+      fetchTransactions();
+    } catch {
+      toast.error("Bulk delete failed");
+    } finally {
+      setBulkActionLoading(false);
     }
   }
 
@@ -258,12 +307,13 @@ export default function TransactionsPage() {
             </div>
           </div>
           {selectedIds.size > 0 && (
-            <div className="mt-3 flex items-center gap-3 rounded-md bg-blue-50 p-3">
+            <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-blue-50 p-3">
               <span className="text-sm font-medium text-blue-700">
                 {selectedIds.size} selected
               </span>
+              <div className="h-5 w-px bg-blue-200" />
               <Select value={bulkAccountId} onValueChange={setBulkAccountId}>
-                <SelectTrigger className="w-64">
+                <SelectTrigger className="w-52 h-8 text-xs">
                   <SelectValue placeholder="Assign category..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -272,12 +322,22 @@ export default function TransactionsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button size="sm" onClick={handleBulkUpdate} disabled={!bulkAccountId}>
+              <Button size="sm" className="h-8" onClick={handleBulkUpdate} disabled={!bulkAccountId || bulkActionLoading}>
                 Apply
               </Button>
-              <div className="ml-auto">
-                <Button size="sm" variant="outline" onClick={handlePushToQbo}>
+              <div className="h-5 w-px bg-blue-200 mx-1" />
+              <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleBulkStatus("reviewed")} disabled={bulkActionLoading}>
+                <CheckCircle className="h-3.5 w-3.5" /> Mark Reviewed
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => handleBulkStatus("needs_review")} disabled={bulkActionLoading}>
+                <AlertCircle className="h-3.5 w-3.5" /> Needs Review
+              </Button>
+              <div className="ml-auto flex gap-2">
+                <Button size="sm" variant="outline" className="h-8" onClick={handlePushToQbo} disabled={bulkActionLoading}>
                   Push to QBO
+                </Button>
+                <Button size="sm" variant="destructive" className="h-8 gap-1" onClick={() => setShowDeleteConfirm(true)} disabled={bulkActionLoading}>
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
                 </Button>
               </div>
             </div>
@@ -478,6 +538,26 @@ export default function TransactionsPage() {
               Cancel
             </Button>
             <Button onClick={handleUpdateTransaction}>Save &amp; Mark Reviewed</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedIds.size} Transactions?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600">
+            This will permanently delete {selectedIds.size} selected transaction{selectedIds.size === 1 ? "" : "s"}. This action cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)} disabled={bulkActionLoading}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete} disabled={bulkActionLoading}>
+              {bulkActionLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
