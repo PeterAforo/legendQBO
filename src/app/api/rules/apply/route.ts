@@ -11,13 +11,14 @@ export async function POST() {
       include: { account: true },
     });
 
-    // Get all uncategorized or pending transactions to re-evaluate
+    // Get all transactions for re-evaluation when rules change
     const transactions = await prisma.extractedTransaction.findMany({
       where: {
         OR: [
           { suggestedAccountId: null },
           { reviewStatus: "needs_review" },
           { reviewStatus: "pending" },
+          { reviewStatus: "reviewed" },
         ],
       },
     });
