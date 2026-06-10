@@ -28,7 +28,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Edit, Play, Loader2, Trash2 } from "lucide-react";
+import { Plus, Edit, Play, Loader2, Trash2, Upload, Download } from "lucide-react";
 import { toast } from "sonner";
 
 interface Rule {
@@ -73,6 +73,7 @@ export default function RulesPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_RULE);
   const [applying, setApplying] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Rule | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -173,6 +174,25 @@ export default function RulesPage() {
     }
   }
 
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const res = await fetch("/api/rules/import", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      toast.success(`Imported ${data.count} rules`);
+      fetchRules();
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -185,6 +205,15 @@ export default function RulesPage() {
             {applying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             Apply All Rules
           </Button>
+          <Button variant="outline" onClick={() => { const a = document.createElement("a"); a.href = "/api/rules/export"; a.download = "rules.csv"; a.click(); }}>
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+          <label htmlFor="rules-upload">
+            <Button asChild disabled={uploading} variant="outline">
+              <span>{uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />} Import CSV</span>
+            </Button>
+          </label>
+          <input id="rules-upload" type="file" accept=".csv" className="hidden" onChange={handleImport} />
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" /> New Rule
           </Button>

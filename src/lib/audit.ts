@@ -9,8 +9,12 @@ export type AuditAction =
   | "rule_created"
   | "rule_updated"
   | "rules_applied"
+  | "rules_imported"
   | "export_generated"
   | "chart_of_accounts_imported"
+  | "account_created"
+  | "account_updated"
+  | "account_deleted"
   | "settings_updated"
   | "user_login"
   | "qbo_push";

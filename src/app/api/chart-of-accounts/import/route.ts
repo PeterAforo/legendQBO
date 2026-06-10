@@ -21,15 +21,19 @@ export async function POST(request: NextRequest) {
     let count = 0;
     for (const row of records as Record<string, string>[]) {
       const accountName =
-        row["Account"] || row["Account Name"] || row["Name"] || row["account_name"];
+        row["Account name"] || row["Account"] || row["Account Name"] || row["Name"] || row["account_name"];
       const accountType =
-        row["Type"] || row["Account Type"] || row["type"] || row["account_type"] || "";
+        row["Account type"] || row["Type"] || row["Account Type"] || row["type"] || row["account_type"] || "";
       const detailType =
-        row["Detail Type"] || row["detail_type"] || row["DetailType"] || null;
-      const parentAccount =
-        row["Parent Account"] || row["parent_account"] || row["ParentAccount"] || null;
+        row["Detail type"] || row["Detail Type"] || row["detail_type"] || row["DetailType"] || null;
 
       if (!accountName) continue;
+
+      // Derive parent from colon separator (e.g. "Personal expenses:Federal taxes")
+      let parentAccount: string | null = null;
+      if (accountName.includes(":")) {
+        parentAccount = accountName.split(":")[0];
+      }
 
       await prisma.chartOfAccount.upsert({
         where: { accountName },

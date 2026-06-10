@@ -1,4 +1,5 @@
-"use client";
+import fs from 'fs';
+const content = `"use client";
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export default function ChartOfAccountsPage() {
   async function handleSave() {
     setSaving(true);
     try {
-      const url = editId ? `/api/chart-of-accounts/${editId}` : "/api/chart-of-accounts";
+      const url = editId ? "/api/chart-of-accounts/" + editId : "/api/chart-of-accounts";
       const method = editId ? "PUT" : "POST";
       const res = await fetch(url, {
         method, headers: { "Content-Type": "application/json" },
@@ -76,9 +77,9 @@ export default function ChartOfAccountsPage() {
   async function handleDelete() {
     if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/chart-of-accounts/${deleteTarget.id}`, { method: "DELETE" });
+      const res = await fetch("/api/chart-of-accounts/" + deleteTarget.id, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
-      toast.success(`Deleted ${deleteTarget.accountName}`);
+      toast.success("Deleted " + deleteTarget.accountName);
       setDeleteTarget(null);
       fetchAccounts();
     } catch { toast.error("Delete failed"); }
@@ -86,7 +87,7 @@ export default function ChartOfAccountsPage() {
 
   async function handleToggle(id: string, active: boolean) {
     try {
-      await fetch(`/api/chart-of-accounts/${id}`, {
+      await fetch("/api/chart-of-accounts/" + id, {
         method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: !active }),
       });
@@ -105,7 +106,7 @@ export default function ChartOfAccountsPage() {
       const res = await fetch("/api/chart-of-accounts/import", { method: "POST", body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Import failed");
-      toast.success(`Imported ${data.count} accounts`);
+      toast.success("Imported " + data.count + " accounts");
       fetchAccounts();
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Import failed"); }
     finally { setUploading(false); }
@@ -114,7 +115,10 @@ export default function ChartOfAccountsPage() {
   function openCreate() { setEditId(null); setForm(EMPTY); setShowDialog(true); }
   function openEdit(a: Account) {
     setEditId(a.id);
-    setForm({ accountName: a.accountName, accountType: a.accountType, detailType: a.detailType || "", parentAccount: a.parentAccount || "" });
+    setForm({
+      accountName: a.accountName, accountType: a.accountType,
+      detailType: a.detailType || "", parentAccount: a.parentAccount || "",
+    });
     setShowDialog(true);
   }
 
@@ -227,3 +231,6 @@ export default function ChartOfAccountsPage() {
     </div>
   );
 }
+`;
+fs.writeFileSync('src/app/(dashboard)/chart-of-accounts/page.tsx', content);
+console.log('done');
